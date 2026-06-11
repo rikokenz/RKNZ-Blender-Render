@@ -1,4 +1,10 @@
-# RKNZ Blender Render
+<p align="center"> 
+<img width="839" height="589" alt="Screenshot (79)" src="https://github.com/user-attachments/assets/45a2178f-edf2-4902-9450-a247fbaf236a" />
+</p>
+
+<h1 align="center">
+  RKNZ Blender Render
+</h1>
 
 A Windows batch render queue manager for Blender — queue multiple `.blend` files and render them sequentially, hands-free.
 
