@@ -21,9 +21,14 @@ namespace BlenderTool
         private Button _processBtn;
         private Button _stopBtn;
         private Button _showTerminalBtn;
-        private CheckBox _hibernateCheck;
+        private ComboBox _whenDoneCombo;
         private ProgressBar _progressBar;
         private Label _progressLabel;
+        private Label _totalEstLabel;
+        private Button _sampleBtn;
+
+        // ── Sampling CTS ──────────────────────────────────────
+        private CancellationTokenSource? _sampleCts;
 
         // ── Terminal window ───────────────────────────────────
         private TerminalForm? _terminalForm;
@@ -39,8 +44,11 @@ namespace BlenderTool
         public MainForm()
         {
             InitializeComponent();
-            // Apply saved theme before showing any UI
-            ThemeManager.Apply(AppSettings.Load().Theme);
+            // Apply saved theme directly to this form (it isn't in Application.OpenForms
+            // yet during construction, so ThemeManager.Apply would miss it).
+            var _savedTheme = AppSettings.Load().Theme;
+            ThemeManager.Apply(_savedTheme);          // sets IsDark + styles any already-open forms
+            ThemeManager.ApplyToForm(this);           // explicitly style this form & its controls
             // Create the terminal once and keep it alive for the lifetime of the app.
             // It starts hidden; the Log button simply shows/hides it.
             _terminalForm = new TerminalForm();
@@ -61,8 +69,7 @@ namespace BlenderTool
             // ── Menu bar ──────────────────────────────────────
             var menuStrip = new MenuStrip();
             var settingsMenu = new ToolStripMenuItem("Preferences");
-            var settingsItem = new ToolStripMenuItem("Settings…");
-            settingsItem.Click += (s, e) =>
+            settingsMenu.Click += (s, e) =>
             {
                 using var dlg = new SettingsForm();
                 dlg.ShowDialog(this);
@@ -74,7 +81,7 @@ namespace BlenderTool
                 {
                     Text = "About RKNZ Blender Render",
                     Width = 380,
-                    Height = 340,
+                    Height = 420,
                     FormBorderStyle = FormBorderStyle.FixedDialog,
                     StartPosition = FormStartPosition.CenterParent,
                     MaximizeBox = false,
@@ -125,6 +132,7 @@ namespace BlenderTool
                     });
                 };
 
+                // separator before support
                 var separator = new Label
                 {
                     Text = new string('─', 46),
@@ -135,11 +143,59 @@ namespace BlenderTool
                     Font = new Font(Font.FontFamily, 8f)
                 };
 
+                var supportLabel = new Label
+                {
+                    Text = "☕  Support the Developer",
+                    Left = 20,
+                    Top = 142,
+                    AutoSize = true,
+                    Font = new Font(Font.FontFamily, 9f, FontStyle.Bold)
+                };
+
+                var supportDesc = new Label
+                {
+                    Text = "If you find this tool useful, consider buying me a coffee!",
+                    Left = 20,
+                    Top = 162,
+                    Width = 330,
+                    AutoSize = true,
+                    ForeColor = Color.Gray,
+                    Font = new Font(Font.FontFamily, 8f)
+                };
+
+                var patreonLink = new LinkLabel
+                {
+                    Text = "Support me on Patreon →",
+                    Left = 20,
+                    Top = 180,
+                    AutoSize = true,
+                    Font = new Font(Font.FontFamily, 9f)
+                };
+                patreonLink.LinkClicked += (ls, le) =>
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = "https://www.patreon.com/rikokensfw",
+                        UseShellExecute = true
+                    });
+                };
+
+                // separator before license
+                var separator2 = new Label
+                {
+                    Text = new string('─', 46),
+                    Left = 20,
+                    Top = 206,
+                    AutoSize = true,
+                    ForeColor = Color.LightGray,
+                    Font = new Font(Font.FontFamily, 8f)
+                };
+
                 var licenseTitle = new Label
                 {
                     Text = "License: GNU General Public License v3.0",
                     Left = 20,
-                    Top = 142,
+                    Top = 224,
                     AutoSize = true,
                     Font = new Font(Font.FontFamily, 9f, FontStyle.Bold)
                 };
@@ -150,7 +206,7 @@ namespace BlenderTool
                            "version must also be open-source under GPL v3.\n" +
                            "No warranty is provided.",
                     Left = 20,
-                    Top = 162,
+                    Top = 244,
                     Width = 330,
                     AutoSize = true,
                     ForeColor = Color.Gray,
@@ -161,7 +217,7 @@ namespace BlenderTool
                 {
                     Text = "© 2026 Rikokenz Studio. All rights reserved.",
                     Left = 20,
-                    Top = 220,
+                    Top = 302,
                     AutoSize = true,
                     ForeColor = Color.Gray,
                     Font = new Font(Font.FontFamily, 8f)
@@ -171,7 +227,7 @@ namespace BlenderTool
                 {
                     Text = "Close",
                     Left = 140,
-                    Top = 254,
+                    Top = 332,
                     Width = 90,
                     DialogResult = DialogResult.OK
                 };
@@ -180,13 +236,13 @@ namespace BlenderTool
                 dlg.Controls.AddRange(new Control[]
                 {
                     titleLabel, versionLabel, devLabel, githubLink,
-                    separator, licenseTitle, licenseDesc, copyrightLabel, closeBtn
+                    separator, supportLabel, supportDesc, patreonLink,
+                    separator2, licenseTitle, licenseDesc,
+                    copyrightLabel, closeBtn
                 });
                 dlg.ShowDialog(this);
             };
-            settingsMenu.DropDownItems.Add(settingsItem);
-            settingsMenu.DropDownItems.Add(new ToolStripSeparator());
-            settingsMenu.DropDownItems.Add(aboutItem);
+
             menuStrip.Items.Add(settingsMenu);
 
             var helpMenu = new ToolStripMenuItem("Help");
@@ -215,6 +271,7 @@ namespace BlenderTool
             helpMenu.DropDownItems.Add(reportBugItem);
             menuStrip.Items.Add(helpMenu);
 
+            menuStrip.Items.Add(aboutItem);
             this.MainMenuStrip = menuStrip;
             this.Controls.Add(menuStrip);
 
@@ -314,7 +371,7 @@ namespace BlenderTool
                 Left = 10,
                 Top = 148,
                 Width = this.ClientSize.Width - 20,
-                Height = this.ClientSize.Height - 148 - 70,
+                Height = this.ClientSize.Height - 148 - 110,
                 Anchor = AnchorStyles.Top | AnchorStyles.Bottom
                           | AnchorStyles.Left | AnchorStyles.Right,
                 View = View.Details,
@@ -323,10 +380,11 @@ namespace BlenderTool
                 AllowDrop = true
             };
             _queueList.Columns.Add("#", 30);
-            _queueList.Columns.Add("Blend File", 260);
-            _queueList.Columns.Add("Frame Range", 110);
-            _queueList.Columns.Add("Output", 200);
-            _queueList.Columns.Add("Status", 100);
+            _queueList.Columns.Add("Blend File", 240);
+            _queueList.Columns.Add("Frame Range", 100);
+            _queueList.Columns.Add("Output", 180);
+            _queueList.Columns.Add("Est. Time", 130);
+            _queueList.Columns.Add("Status", 90);
 
             // Double-click to edit
             _queueList.MouseDoubleClick += QueueList_MouseDoubleClick;
@@ -342,17 +400,34 @@ namespace BlenderTool
             var ctx = new ContextMenuStrip();
             var removeItem = new ToolStripMenuItem("Remove");
             removeItem.Click += RemoveSelected_Click;
+            var resetItem = new ToolStripMenuItem("Reset to Waiting");
+            resetItem.Click += (s, e) =>
+            {
+                foreach (ListViewItem item in _queueList.SelectedItems)
+                {
+                    int idx = item.Index;
+                    if (idx < 0 || idx >= _queue.Jobs.Count) continue;
+                    var j = _queue.Jobs[idx];
+                    j.Status = JobStatus.Waiting;
+                }
+                RefreshList();
+            };
             var openOutputItem = new ToolStripMenuItem("Open Output in Explorer");
             openOutputItem.Click += OpenOutputInExplorer_Click;
-            ctx.Items.Add(removeItem);
+            ctx.Items.Add(resetItem);
             ctx.Items.Add(new ToolStripSeparator());
             ctx.Items.Add(openOutputItem);
+            ctx.Items.Add(new ToolStripSeparator());
+            ctx.Items.Add(removeItem);
             ctx.Opening += (s, e) =>
             {
                 var sel = _queueList.SelectedItems;
                 if (sel.Count == 0) { e.Cancel = true; return; }
                 int idx = sel[0].Index;
                 var job = idx < _queue.Jobs.Count ? _queue.Jobs[idx] : null;
+                // Reset only makes sense for Done/Failed jobs
+                resetItem.Enabled = job != null &&
+                    (job.Status == JobStatus.Done || job.Status == JobStatus.Failed);
                 // Always enabled as long as there's a job selected — default falls back to blend dir
                 openOutputItem.Enabled = job != null && File.Exists(job.BlendFile);
             };
@@ -361,56 +436,149 @@ namespace BlenderTool
             this.Controls.Add(_queueList);
 
             // ── Bottom bar ────────────────────────────────────
+            // Uses a TableLayoutPanel so every control is aligned in a proper grid.
+            // Layout (2 columns: left = progress/estimate, right = when-done + action buttons):
+            //
+            //  ┌─────────────────────────────────┬──────────────────────────────────┐
+            //  │ ProgressBar (fills width)        │ [When done: ▼ dropdown         ] │
+            //  ├─────────────────────────────────┤                                  │
+            //  │ Progress status label            │ [▶ Process Queue][■ Stop][📋Log] │
+            //  ├─────────────────────────────────┤                                  │
+            //  │ Total Est.: —  [⏱ Calc. Est.]   │                                  │
+            //  └─────────────────────────────────┴──────────────────────────────────┘
+
             var bottomPanel = new Panel
             {
                 Left = 0,
-                Top = this.ClientSize.Height - 70,
+                Top = this.ClientSize.Height - 110,
                 Width = this.ClientSize.Width,
-                Height = 70,
-                Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
+                Height = 110,
+                Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
+                Padding = new Padding(8, 6, 8, 6)
             };
 
+            // ── Left column: progress bar, status label, estimate row ──
             _progressBar = new ProgressBar
             {
-                Left = 10,
-                Top = 10,
-                Width = this.ClientSize.Width - 330,
-                Height = 22,
-                Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top
+                Height = 20,
+                Width = 10,   // placeholder; SizeChanged will set real width
+                Margin = new Padding(0, 0, 0, 4)
             };
 
             _progressLabel = new Label
             {
                 Text = "Ready",
-                Left = 10,
-                Top = 36,
-                Width = this.ClientSize.Width - 330,
+                Height = 18,
+                Width = 10,   // placeholder; SizeChanged will set real width
                 AutoSize = false,
                 ForeColor = Color.DimGray,
-                Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top
+                TextAlign = ContentAlignment.MiddleLeft
             };
 
-            // ── Hibernate checkbox – sits above the three right buttons ──
-            _hibernateCheck = new CheckBox
+            // Estimate row: label + Calc button side-by-side
+            _totalEstLabel = new Label
             {
-                Text = "Hibernate when done",
-                Left = this.ClientSize.Width - 310,
-                Top = 4,
-                Width = 298,
-                Height = 18,
-                Anchor = AnchorStyles.Right | AnchorStyles.Top,
+                Text = "Total Est.: —",
+                AutoSize = false,
                 ForeColor = Color.DimGray,
-                Font = new Font(Font.FontFamily, 7.5f)
+                Font = new Font(Font.FontFamily, 8f),
+                TextAlign = ContentAlignment.MiddleLeft
             };
+
+            _sampleBtn = new Button
+            {
+                Text = "⏱ Calc. Est.",
+                Width = 110,
+                Height = 22,
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font(Font.FontFamily, 8f)
+            };
+            _sampleBtn.Click += SampleBtn_Click;
+
+            // Estimate row panel holds the label and button in a single cell.
+            // Explicit Height required — FlowLayoutPanel ignores Dock on children.
+            var estRowPanel = new Panel { Height = 26 };
+            estRowPanel.Controls.Add(_totalEstLabel);
+            estRowPanel.Controls.Add(_sampleBtn);
+            _totalEstLabel.Left   = 0;
+            _totalEstLabel.Top    = 2;
+            _totalEstLabel.Height = 22;
+            _sampleBtn.Top        = 2;
+
+            // Left stack panel using FlowLayoutPanel (vertical)
+            var leftStack = new FlowLayoutPanel
+            {
+                FlowDirection = FlowDirection.TopDown,
+                Dock = DockStyle.Fill,
+                WrapContents = false,
+                AutoSize = false
+            };
+
+            leftStack.Controls.Add(_progressBar);
+            leftStack.Controls.Add(_progressLabel);
+            leftStack.Controls.Add(estRowPanel);
+
+            // FlowLayoutPanel ignores Dock on children; use Layout event so the width
+            // is applied both on first layout pass and on every subsequent resize.
+            leftStack.Layout += (s, e) =>
+            {
+                if (leftStack.ClientSize.Width > 0)
+                {
+                    int w = leftStack.ClientSize.Width;
+                    _progressBar.Width   = w;
+                    _progressLabel.Width = w;
+                    estRowPanel.Width    = w;
+                    _totalEstLabel.Width = w - _sampleBtn.Width - 12;
+                    _sampleBtn.Left      = w - _sampleBtn.Width - 8;
+                }
+            };
+
+            // ── Right column: When done label+combo, then action buttons ──
+            var whenDoneLabel = new Label
+            {
+                Text = "When done:",
+                AutoSize = false,
+                Width = 76,
+                Height = 22,
+                ForeColor = Color.DimGray,
+                Font = new Font(Font.FontFamily, 7.5f),
+                TextAlign = ContentAlignment.MiddleLeft,
+                Dock = DockStyle.None
+            };
+
+            _whenDoneCombo = new ComboBox
+            {
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Font = new Font(Font.FontFamily, 8f),
+                Height = 22,
+                Dock = DockStyle.None
+            };
+            _whenDoneCombo.Items.AddRange(new object[]
+            {
+                "Do nothing",
+                "Hibernate",
+                "Shutdown",
+                "Support Me  ^^"
+            });
+            _whenDoneCombo.SelectedIndex = 0;
+
+            // When-done row: label + combo side-by-side
+            var whenDoneRow = new FlowLayoutPanel
+            {
+                FlowDirection = FlowDirection.LeftToRight,
+                AutoSize = true,
+                WrapContents = false,
+                Dock = DockStyle.Top,
+                Margin = new Padding(0, 0, 0, 4)
+            };
+            whenDoneRow.Controls.Add(whenDoneLabel);
+            whenDoneRow.Controls.Add(_whenDoneCombo);
 
             _processBtn = new Button
             {
                 Text = "▶  Process Queue",
-                Left = this.ClientSize.Width - 310,
-                Top = 24,
                 Width = 150,
                 Height = 38,
-                Anchor = AnchorStyles.Right | AnchorStyles.Top,
                 BackColor = Color.FromArgb(0, 120, 212),
                 ForeColor = Color.White,
                 FlatStyle = FlatStyle.Flat
@@ -420,11 +588,8 @@ namespace BlenderTool
             _stopBtn = new Button
             {
                 Text = "■  Stop",
-                Left = this.ClientSize.Width - 155,
-                Top = 24,
                 Width = 80,
                 Height = 38,
-                Anchor = AnchorStyles.Right | AnchorStyles.Top,
                 Enabled = false,
                 FlatStyle = FlatStyle.Flat
             };
@@ -433,20 +598,62 @@ namespace BlenderTool
             _showTerminalBtn = new Button
             {
                 Text = "📋 Log",
-                Left = this.ClientSize.Width - 70,
-                Top = 24,
                 Width = 58,
                 Height = 38,
-                Anchor = AnchorStyles.Right | AnchorStyles.Top,
                 FlatStyle = FlatStyle.Flat
             };
             _showTerminalBtn.Click += ShowTerminal_Click;
 
-            bottomPanel.Controls.AddRange(new Control[]
+            // Action buttons row
+            var actionRow = new FlowLayoutPanel
             {
-                _progressBar, _progressLabel,
-                _hibernateCheck, _processBtn, _stopBtn, _showTerminalBtn
-            });
+                FlowDirection = FlowDirection.LeftToRight,
+                AutoSize = true,
+                WrapContents = false,
+                Dock = DockStyle.Top
+            };
+            actionRow.Controls.Add(_processBtn);
+            actionRow.Controls.Add(_stopBtn);
+            actionRow.Controls.Add(_showTerminalBtn);
+
+            // Right stack panel
+            var rightStack = new Panel
+            {
+                Dock = DockStyle.Fill,
+                Padding = new Padding(8, 0, 0, 0)
+            };
+            rightStack.Controls.Add(actionRow);
+            rightStack.Controls.Add(whenDoneRow);
+            // Stack them vertically via Top offset; whenDoneRow on top, actionRow below
+            whenDoneRow.Dock = DockStyle.None;
+            actionRow.Dock = DockStyle.None;
+            whenDoneRow.Top = 2;
+            whenDoneRow.Left = 8;
+            actionRow.Top = 32;
+            actionRow.Left = 8;
+
+            // size the combo to fill remaining space in its row once the panel is sized
+            rightStack.SizeChanged += (s, e) =>
+            {
+                int comboW = rightStack.ClientSize.Width - 8 - whenDoneLabel.Width - whenDoneRow.Margin.Horizontal - 4;
+                if (comboW > 60) _whenDoneCombo.Width = comboW;
+            };
+
+            // Main table: 2 columns (left fills, right is fixed 310px)
+            var table = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                RowCount = 1,
+                Padding = new Padding(0)
+            };
+            table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 318f));
+            table.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            table.Controls.Add(leftStack, 0, 0);
+            table.Controls.Add(rightStack, 1, 0);
+
+            bottomPanel.Controls.Add(table);
             this.Controls.Add(bottomPanel);
         }
 
@@ -471,16 +678,97 @@ namespace BlenderTool
                 });
             };
 
+            _queue.EstimateUpdated += () =>
+            {
+                this.Invoke(() =>
+                {
+                    _queue.PropagateEstimates();
+                    RefreshList();
+                });
+            };
+
             _queue.QueueFinished += () =>
             {
                 this.Invoke(() =>
                 {
                     _processBtn.Enabled = true;
                     _stopBtn.Enabled = false;
+                    _sampleBtn.Enabled = true;
                     _progressLabel.Text = "Queue finished.";
+                    _queue.PropagateEstimates();
                     RefreshList();
+
+                    var selected = _whenDoneCombo.SelectedItem?.ToString() ?? "Do nothing";
+                    switch (selected)
+                    {
+                        case "Hibernate":
+                            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                            {
+                                FileName = "shutdown",
+                                Arguments = "/h",
+                                UseShellExecute = false,
+                                CreateNoWindow = true
+                            });
+                            break;
+
+                        case "Shutdown":
+                            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                            {
+                                FileName = "shutdown",
+                                Arguments = "/s /t 0",
+                                UseShellExecute = false,
+                                CreateNoWindow = true
+                            });
+                            break;
+
+                        case "Support Me  ^^":
+                            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                            {
+                                FileName = "https://www.patreon.com/rikokensfw",
+                                UseShellExecute = true
+                            });
+                            break;
+
+                        // "Do nothing" — fall through
+                    }
                 });
             };
+        }
+
+        private async void SampleBtn_Click(object? sender, EventArgs e)
+        {
+            if (_queue.Jobs.Count == 0)
+            {
+                MessageBox.Show("Add at least one job to the queue first.",
+                    "Empty Queue", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            if (string.IsNullOrEmpty(AppSettings.GetBlenderPath()))
+            {
+                MessageBox.Show("Please set the path to blender.exe in Settings first.",
+                    "Blender Not Set", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            _sampleBtn.Enabled  = false;
+            _processBtn.Enabled = false;
+            _sampleCts = new CancellationTokenSource();
+            _progressLabel.Text = "Sampling frames for time estimate…";
+
+            try
+            {
+                await _queue.SampleAllAsync(_sampleCts.Token);
+                _queue.PropagateEstimates();
+                RefreshList();
+                _progressLabel.Text = "Estimation complete.";
+            }
+            finally
+            {
+                _sampleCts = null;
+                _sampleBtn.Enabled  = true;
+                _processBtn.Enabled = true;
+            }
         }
 
         // ─────────────────────────────────────────────────────
@@ -509,8 +797,7 @@ namespace BlenderTool
                 EditFrameRange(job);
             else if (colIndex == 3)
                 EditOutputPath(job);
-            else
-                EditBlendFile(job); // col 0, 1, 4 or anywhere on the row
+            // All other columns (blend file, est. time, status, #) — do nothing on double-click
         }
 
         // Returns which column index the given X coordinate falls in
@@ -841,6 +1128,9 @@ namespace BlenderTool
                 FrameEnd = _frameEndBox.Text.Trim()
             };
             _queue.Jobs.Add(job);
+            // If a sampled estimate exists for this blend file, copy it to the new job immediately
+            // so the Est. Time column shows up without needing to re-run Calc. Est.
+            _queue.PropagateEstimates();
             RefreshList();
         }
 
@@ -899,24 +1189,59 @@ namespace BlenderTool
         private void RefreshList()
         {
             _queueList.Items.Clear();
+
+            // Force the ListView's own ForeColor to the correct default so unselected
+            // rows don't appear grey — ThemeManager may set this to a system color that
+            // renders grey in some Windows visual styles.
+            _queueList.ForeColor = ThemeManager.IsDark
+                ? Color.FromArgb(220, 220, 220)
+                : Color.Black;
+
             for (int i = 0; i < _queue.Jobs.Count; i++)
             {
                 var job = _queue.Jobs[i];
                 var item = new ListViewItem((i + 1).ToString());
+                item.UseItemStyleForSubItems = true;
                 item.SubItems.Add(job.BlendFile);
                 item.SubItems.Add(job.FrameRangeDisplay);
                 item.SubItems.Add(job.OutputDisplay);
+                item.SubItems.Add(job.EstimatedTimeDisplay);
                 item.SubItems.Add(job.StatusText);
 
                 item.ForeColor = job.Status switch
                 {
-                    JobStatus.Done => Color.Green,
-                    JobStatus.Failed => Color.Red,
+                    JobStatus.Done      => Color.Green,
+                    JobStatus.Failed    => Color.Red,
                     JobStatus.Rendering => Color.DodgerBlue,
                     _ => ThemeManager.IsDark ? Color.FromArgb(220, 220, 220) : Color.Black
                 };
                 _queueList.Items.Add(item);
             }
+
+            UpdateTotalEstimate();
+        }
+
+        private void UpdateTotalEstimate()
+        {
+            double total = 0;
+            bool anyUnknown = false;
+            foreach (var job in _queue.Jobs)
+            {
+                if (job.Status == JobStatus.Done) continue;
+                if (job.SecondsPerFrame == null) { anyUnknown = true; continue; }
+                int? fc = job.FrameCount;
+                if (fc == null) { anyUnknown = true; continue; }
+                total += job.SecondsPerFrame.Value * fc.Value;
+            }
+
+            if (total == 0 && anyUnknown)
+                _totalEstLabel.Text = "Total Est.: —";
+            else if (anyUnknown)
+                _totalEstLabel.Text = $"Total Est.: {RenderJob.FormatSeconds(total)} + unknown";
+            else if (total == 0)
+                _totalEstLabel.Text = "Total Est.: —";
+            else
+                _totalEstLabel.Text = $"Total Est.: {RenderJob.FormatSeconds(total)}";
         }
     }
 }

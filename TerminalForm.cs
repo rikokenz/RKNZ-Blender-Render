@@ -66,7 +66,11 @@ namespace BlenderTool
                 this.Invoke(() => AppendLine(line));
                 return;
             }
+            int start = _output.TextLength;
             _output.AppendText(line + Environment.NewLine);
+            _output.Select(start, _output.TextLength - start);
+            _output.SelectionColor  = Color.LimeGreen;
+            _output.SelectionLength = 0;
             _output.ScrollToCaret();
         }
     }
