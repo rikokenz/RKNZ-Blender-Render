@@ -6,6 +6,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>RKNZ-Blender-Render</AssemblyName>
+	<ProductName>RKNZ Blender Render</ProductName>
     <RootNamespace>BlenderTool</RootNamespace>
   </PropertyGroup>
 </Project>

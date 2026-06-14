@@ -13,6 +13,8 @@ namespace BlenderTool
         private TextBox _frameEndBox;
         private Button _browseBlendBtn;
         private Button _addToQueueBtn;
+        private CheckBox _viewportRenderCheck;
+        private ComboBox _viewportShadingCombo;
 
         // ── Queue list ────────────────────────────────────────
         private ListView _queueList;
@@ -65,13 +67,14 @@ namespace BlenderTool
             this.Height = 600;
             this.MinimumSize = new Size(700, 480);
             this.StartPosition = FormStartPosition.CenterScreen;
+            this.TopMost = true;
 
             // ── Menu bar ──────────────────────────────────────
             var menuStrip = new MenuStrip();
             var settingsMenu = new ToolStripMenuItem("Preferences");
             settingsMenu.Click += (s, e) =>
             {
-                using var dlg = new SettingsForm();
+                using var dlg = new SettingsForm { TopMost = true };
                 dlg.ShowDialog(this);
             };
             var aboutItem = new ToolStripMenuItem("About");
@@ -85,7 +88,8 @@ namespace BlenderTool
                     FormBorderStyle = FormBorderStyle.FixedDialog,
                     StartPosition = FormStartPosition.CenterParent,
                     MaximizeBox = false,
-                    MinimizeBox = false
+                    MinimizeBox = false,
+                    TopMost = true
                 };
 
                 var titleLabel = new Label
@@ -281,7 +285,7 @@ namespace BlenderTool
                 Left = 0,
                 Top = 28,
                 Width = this.ClientSize.Width,
-                Height = 110,
+                Height = 145,
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
                 Padding = new Padding(10)
             };
@@ -335,22 +339,178 @@ namespace BlenderTool
                 PlaceholderText = "250"
             };
 
-            var rangeHint = new Label
+            // Round blue ? button for frame range
+            var rangeHelpBtn = new Button
             {
-                Text = "(leave empty to render full timeline)",
-                Left = 300,
-                Top = 46,
+                Text = "?",
+                Left = 298,
+                Top = 42,
+                Width = 20,
+                Height = 20,
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font(Font.FontFamily, 8f, FontStyle.Bold),
+                ForeColor = Color.DodgerBlue,
+                BackColor = Color.Transparent,
+                Cursor = Cursors.Help,
+                TabStop = false
+            };
+            rangeHelpBtn.FlatAppearance.BorderSize = 1;
+            rangeHelpBtn.FlatAppearance.BorderColor = Color.DodgerBlue;
+            {
+                var gp = new System.Drawing.Drawing2D.GraphicsPath();
+                gp.AddEllipse(0, 0, rangeHelpBtn.Width - 1, rangeHelpBtn.Height - 1);
+                rangeHelpBtn.Region = new System.Drawing.Region(gp);
+            }
+
+            // Hover-driven tooltip for frame range (shows while hovering, hides with delay after leave)
+            var rangePopup = new Form
+            {
+                FormBorderStyle = FormBorderStyle.None,
+                StartPosition = FormStartPosition.Manual,
+                ShowInTaskbar = false,
+                TopMost = true,
+                Padding = new Padding(8),
                 AutoSize = true,
-                ForeColor = Color.Gray,
-                Font = new Font(Font.FontFamily, 8f)
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                BackColor = Color.FromArgb(255, 255, 225)
+            };
+            var rangePopupLabel = new Label
+            {
+                Text =
+                    "Frame Range  (Start / End)\r\n" +
+                    "\r\n" +
+                    "Overrides which frames to render for this job.\r\n" +
+                    "Leave both empty to use the full timeline\r\n" +
+                    "as set inside the .blend file.\r\n" +
+                    "\r\n" +
+                    "Tip: you can also double-click the Frame Range\r\n" +
+                    "column in the queue list to edit it after adding.",
+                AutoSize = true,
+                Font = new Font(Font.FontFamily, 8.5f),
+                ForeColor = Color.Black
+            };
+            rangePopup.Controls.Add(rangePopupLabel);
+            System.Windows.Forms.Timer rangeHideTimer = new System.Windows.Forms.Timer { Interval = 400 };
+            rangeHideTimer.Tick += (s, e) => { rangeHideTimer.Stop(); rangePopup.Hide(); };
+            rangeHelpBtn.MouseEnter += (s, e) =>
+            {
+                rangeHideTimer.Stop();
+                var screenPt = rangeHelpBtn.PointToScreen(new Point(rangeHelpBtn.Width + 2, 0));
+                rangePopup.Location = screenPt;
+                if (!rangePopup.Visible) rangePopup.Show();
+            };
+            rangeHelpBtn.MouseLeave += (s, e) => rangeHideTimer.Start();
+            rangePopup.MouseEnter += (s, e) => rangeHideTimer.Stop();
+            rangePopup.MouseLeave += (s, e) => rangeHideTimer.Start();
+            rangePopupLabel.MouseEnter += (s, e) => rangeHideTimer.Stop();
+            rangePopupLabel.MouseLeave += (s, e) => rangeHideTimer.Start();
+
+            // Row 3 – viewport render + shading mode
+            _viewportRenderCheck = new CheckBox
+            {
+                Text = "Viewport Render",
+                Left = 10,
+                Top = 78,
+                AutoSize = true
             };
 
-            // Row 3 – add button
+            _viewportShadingCombo = new ComboBox
+            {
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Left = 136,
+                Top = 75,
+                Width = 130,
+                Enabled = false
+            };
+            _viewportShadingCombo.Items.AddRange(new object[]
+            {
+                "Wireframe", "Solid", "Material Preview", "Rendered"
+            });
+            _viewportShadingCombo.SelectedIndex = (int)ViewportShadingMode.Solid;
+
+            _viewportRenderCheck.CheckedChanged += (s, e) =>
+            {
+                _viewportShadingCombo.Enabled = _viewportRenderCheck.Checked;
+            };
+
+            // Round blue ? button for viewport render
+            var viewportHelpBtn = new Button
+            {
+                Text = "?",
+                Left = 274,
+                Top = 76,
+                Width = 20,
+                Height = 20,
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font(Font.FontFamily, 8f, FontStyle.Bold),
+                ForeColor = Color.DodgerBlue,
+                BackColor = Color.Transparent,
+                Cursor = Cursors.Help,
+                TabStop = false
+            };
+            viewportHelpBtn.FlatAppearance.BorderSize = 1;
+            viewportHelpBtn.FlatAppearance.BorderColor = Color.DodgerBlue;
+            {
+                var gp = new System.Drawing.Drawing2D.GraphicsPath();
+                gp.AddEllipse(0, 0, viewportHelpBtn.Width - 1, viewportHelpBtn.Height - 1);
+                viewportHelpBtn.Region = new System.Drawing.Region(gp);
+            }
+
+            // Hover-driven tooltip for viewport render
+            var viewportPopup = new Form
+            {
+                FormBorderStyle = FormBorderStyle.None,
+                StartPosition = FormStartPosition.Manual,
+                ShowInTaskbar = false,
+                TopMost = true,
+                Padding = new Padding(8),
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                BackColor = Color.FromArgb(255, 255, 225)
+            };
+            var viewportPopupLabel = new Label
+            {
+                Text =
+                    "Viewport Render\r\n" +
+                    "\r\n" +
+                    "Renders frames using the 3D viewport instead of the final\r\n" +
+                    "render engine. A blank Blender window will open while this\r\n" +
+                    "runs — that is completely normal. Don't panic and don't close\r\n" +
+                    "it; it will shut itself down automatically when the job is done.\r\n" +
+                    "\r\n" +
+                    "Shading mode sets how the viewport looks during render:\r\n" +
+                    "  • Solid           — fast, no materials or lighting\r\n" +
+                    "  • Material Preview — HDRI-lit material preview\r\n" +
+                    "  • Rendered        — full EEVEE/Cycles inside the viewport\r\n" +
+                    "  • Wireframe       — mesh edges only, no shading\r\n" +
+                    "\r\n" +
+                    "The camera angle follows the active camera in your .blend file.",
+                AutoSize = true,
+                Font = new Font(Font.FontFamily, 8.5f),
+                ForeColor = Color.Black
+            };
+            viewportPopup.Controls.Add(viewportPopupLabel);
+            System.Windows.Forms.Timer viewportHideTimer = new System.Windows.Forms.Timer { Interval = 400 };
+            viewportHideTimer.Tick += (s, e) => { viewportHideTimer.Stop(); viewportPopup.Hide(); };
+            viewportHelpBtn.MouseEnter += (s, e) =>
+            {
+                viewportHideTimer.Stop();
+                var screenPt = viewportHelpBtn.PointToScreen(new Point(viewportHelpBtn.Width + 2, 0));
+                viewportPopup.Location = screenPt;
+                if (!viewportPopup.Visible) viewportPopup.Show();
+            };
+            viewportHelpBtn.MouseLeave += (s, e) => viewportHideTimer.Start();
+            viewportPopup.MouseEnter += (s, e) => viewportHideTimer.Stop();
+            viewportPopup.MouseLeave += (s, e) => viewportHideTimer.Start();
+            viewportPopupLabel.MouseEnter += (s, e) => viewportHideTimer.Stop();
+            viewportPopupLabel.MouseLeave += (s, e) => viewportHideTimer.Start();
+
+            // Row 4 – add to queue button
             _addToQueueBtn = new Button
             {
                 Text = "+ Add to Queue",
                 Left = 10,
-                Top = 74,
+                Top = 108,
                 Width = 130,
                 Height = 28
             };
@@ -360,7 +520,8 @@ namespace BlenderTool
             {
                 blendLabel, _blendFileBox, _browseBlendBtn,
                 frameLabel, startLabel, _frameStartBox,
-                endLabel,   _frameEndBox,  rangeHint,
+                endLabel,   _frameEndBox,  rangeHelpBtn,
+                _viewportRenderCheck, _viewportShadingCombo, viewportHelpBtn,
                 _addToQueueBtn
             });
             this.Controls.Add(topPanel);
@@ -369,9 +530,9 @@ namespace BlenderTool
             _queueList = new ListView
             {
                 Left = 10,
-                Top = 148,
+                Top = 183,
                 Width = this.ClientSize.Width - 20,
-                Height = this.ClientSize.Height - 148 - 110,
+                Height = this.ClientSize.Height - 183 - 110,
                 Anchor = AnchorStyles.Top | AnchorStyles.Bottom
                           | AnchorStyles.Left | AnchorStyles.Right,
                 View = View.Details,
@@ -380,10 +541,11 @@ namespace BlenderTool
                 AllowDrop = true
             };
             _queueList.Columns.Add("#", 30);
-            _queueList.Columns.Add("Blend File", 240);
-            _queueList.Columns.Add("Frame Range", 100);
-            _queueList.Columns.Add("Output", 180);
-            _queueList.Columns.Add("Est. Time", 130);
+            _queueList.Columns.Add("Blend File", 220);
+            _queueList.Columns.Add("Frame Range", 95);
+            _queueList.Columns.Add("Output", 150);
+            _queueList.Columns.Add("Mode", 130);
+            _queueList.Columns.Add("Est. Time", 110);
             _queueList.Columns.Add("Status", 90);
 
             // Double-click to edit
@@ -797,6 +959,8 @@ namespace BlenderTool
                 EditFrameRange(job);
             else if (colIndex == 3)
                 EditOutputPath(job);
+            else if (colIndex == 4)
+                EditRenderMode(job);
             // All other columns (blend file, est. time, status, #) — do nothing on double-click
         }
 
@@ -842,7 +1006,8 @@ namespace BlenderTool
                 FormBorderStyle = FormBorderStyle.FixedDialog,
                 StartPosition = FormStartPosition.CenterParent,
                 MaximizeBox = false,
-                MinimizeBox = false
+                MinimizeBox = false,
+                TopMost = true
             };
 
             var startLbl = new Label { Text = "Start:", Left = 12, Top = 16, AutoSize = true };
@@ -917,7 +1082,8 @@ namespace BlenderTool
                 FormBorderStyle = FormBorderStyle.FixedDialog,
                 StartPosition = FormStartPosition.CenterParent,
                 MaximizeBox = false,
-                MinimizeBox = false
+                MinimizeBox = false,
+                TopMost = true
             };
 
             var lbl = new Label { Text = "Output folder:", Left = 12, Top = 16, AutoSize = true };
@@ -976,6 +1142,87 @@ namespace BlenderTool
             if (dlg.ShowDialog(this) == DialogResult.OK)
             {
                 job.OutputPath = txt.Text.Trim();
+                RefreshList();
+            }
+        }
+
+        private void EditRenderMode(RenderJob job)
+        {
+            // Small dialog: viewport-render checkbox + shading-mode combo + OK / Cancel
+            using var dlg = new Form
+            {
+                Text = "Render Mode",
+                Width = 330,
+                Height = 170,
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                StartPosition = FormStartPosition.CenterParent,
+                MaximizeBox = false,
+                MinimizeBox = false,
+                TopMost = true
+            };
+
+            var viewportCheck = new CheckBox
+            {
+                Text = "Viewport Render (instead of final render)",
+                Left = 12,
+                Top = 16,
+                AutoSize = true,
+                Checked = job.UseViewportRender
+            };
+
+            var shadingLabel = new Label { Text = "Shading:", Left = 12, Top = 52, AutoSize = true };
+            var shadingCombo = new ComboBox
+            {
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Left = 80,
+                Top = 48,
+                Width = 160,
+                Enabled = job.UseViewportRender
+            };
+            shadingCombo.Items.AddRange(new object[] { "Wireframe", "Solid", "Material Preview", "Rendered" });
+            shadingCombo.SelectedIndex = (int)job.ShadingMode;
+
+            viewportCheck.CheckedChanged += (s, e) => shadingCombo.Enabled = viewportCheck.Checked;
+
+            var hint = new Label
+            {
+                Text = "Viewport render looks through the active camera using the\n" +
+                       "selected shading mode, instead of doing a full render.",
+                Left = 12,
+                Top = 82,
+                Width = 290,
+                Height = 36,
+                AutoSize = false,
+                ForeColor = Color.Gray,
+                Font = new Font(Font.FontFamily, 8f)
+            };
+
+            var okBtn = new Button
+            {
+                Text = "OK",
+                Left = 140,
+                Top = 128,
+                Width = 80,
+                DialogResult = DialogResult.OK
+            };
+            var cancelBtn = new Button
+            {
+                Text = "Cancel",
+                Left = 228,
+                Top = 128,
+                Width = 80,
+                DialogResult = DialogResult.Cancel
+            };
+
+            dlg.AcceptButton = okBtn;
+            dlg.CancelButton = cancelBtn;
+            dlg.Controls.AddRange(new Control[]
+                { viewportCheck, shadingLabel, shadingCombo, hint, okBtn, cancelBtn });
+
+            if (dlg.ShowDialog(this) == DialogResult.OK)
+            {
+                job.UseViewportRender = viewportCheck.Checked;
+                job.ShadingMode = (ViewportShadingMode)shadingCombo.SelectedIndex;
                 RefreshList();
             }
         }
@@ -1125,7 +1372,9 @@ namespace BlenderTool
             {
                 BlendFile = file,
                 FrameStart = _frameStartBox.Text.Trim(),
-                FrameEnd = _frameEndBox.Text.Trim()
+                FrameEnd = _frameEndBox.Text.Trim(),
+                UseViewportRender = _viewportRenderCheck.Checked,
+                ShadingMode = (ViewportShadingMode)_viewportShadingCombo.SelectedIndex
             };
             _queue.Jobs.Add(job);
             // If a sampled estimate exists for this blend file, copy it to the new job immediately
@@ -1205,6 +1454,7 @@ namespace BlenderTool
                 item.SubItems.Add(job.BlendFile);
                 item.SubItems.Add(job.FrameRangeDisplay);
                 item.SubItems.Add(job.OutputDisplay);
+                item.SubItems.Add(job.RenderModeDisplay);
                 item.SubItems.Add(job.EstimatedTimeDisplay);
                 item.SubItems.Add(job.StatusText);
 

@@ -4,6 +4,9 @@ namespace BlenderTool
 {
     public enum JobStatus { Waiting, Rendering, Done, Failed }
 
+    /// <summary>Viewport shading modes available for viewport (OpenGL) renders.</summary>
+    public enum ViewportShadingMode { Wireframe, Solid, Material, Rendered }
+
     public class RenderJob
     {
         public string BlendFile  { get; set; } = string.Empty;
@@ -34,6 +37,43 @@ namespace BlenderTool
 
         public string OutputDisplay =>
             string.IsNullOrWhiteSpace(OutputPath) ? "(default)" : OutputPath;
+
+        // ── Viewport (OpenGL) render mode ─────────────────────
+        /// <summary>
+        /// When true, this job is rendered using Blender's viewport (OpenGL)
+        /// render instead of the actual scene render. Before rendering, the
+        /// 3D viewport is switched to look through the scene's active camera
+        /// (so it isn't rendered from whatever angle it was last left at) and
+        /// set to the shading mode in <see cref="ShadingMode"/>.
+        /// </summary>
+        public bool UseViewportRender { get; set; } = false;
+
+        /// <summary>Viewport shading mode used when <see cref="UseViewportRender"/> is true.</summary>
+        public ViewportShadingMode ShadingMode { get; set; } = ViewportShadingMode.Solid;
+
+        /// <summary>Human-readable name of <see cref="ShadingMode"/>.</summary>
+        public string ShadingModeDisplay => ShadingMode switch
+        {
+            ViewportShadingMode.Wireframe => "Wireframe",
+            ViewportShadingMode.Solid      => "Solid",
+            ViewportShadingMode.Material   => "Material Preview",
+            ViewportShadingMode.Rendered   => "Rendered",
+            _                               => "Solid"
+        };
+
+        /// <summary>Value expected by Blender's space_data.shading.type for <see cref="ShadingMode"/>.</summary>
+        public string ShadingTypeBlenderValue => ShadingMode switch
+        {
+            ViewportShadingMode.Wireframe => "WIREFRAME",
+            ViewportShadingMode.Solid      => "SOLID",
+            ViewportShadingMode.Material   => "MATERIAL",
+            ViewportShadingMode.Rendered   => "RENDERED",
+            _                               => "SOLID"
+        };
+
+        /// <summary>Display string for the queue's Mode column.</summary>
+        public string RenderModeDisplay =>
+            UseViewportRender ? $"Viewport ({ShadingModeDisplay})" : "Final Render";
 
         // ── Frame range detected from the .blend file ─────────
         /// <summary>
