@@ -8,5 +8,9 @@
     <AssemblyName>RKNZ-Blender-Render</AssemblyName>
 	<ProductName>RKNZ Blender Render</ProductName>
     <RootNamespace>BlenderTool</RootNamespace>
+    <ApplicationIcon>favicon.ico</ApplicationIcon>
   </PropertyGroup>
+  <ItemGroup>
+    <Content Include="favicon.ico" />
+  </ItemGroup>
 </Project>

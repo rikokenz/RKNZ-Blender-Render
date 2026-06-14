@@ -46,6 +46,8 @@ namespace BlenderTool
         public MainForm()
         {
             InitializeComponent();
+            //set apps icon to the embedded resource (fallback to exe icon if resource is missing for some reason)
+            this.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
             // Apply saved theme directly to this form (it isn't in Application.OpenForms
             // yet during construction, so ThemeManager.Apply would miss it).
             var _savedTheme = AppSettings.Load().Theme;
